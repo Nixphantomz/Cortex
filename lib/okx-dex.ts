@@ -1,0 +1,106 @@
+import crypto from "crypto";
+
+const BASE_URL = "https://web3.okx.com";
+const CHAIN_INDEX = "196"; // X Layer mainnet — OKX's DEX aggregator has no testnet liquidity
+
+function sign(timestamp: string, method: string, requestPath: string, body = ""): string {
+  const prehash = timestamp + method + requestPath + body;
+  return crypto.createHmac("sha256", process.env.OKX_SECRET_KEY!).update(prehash).digest("base64");
+}
+
+function buildHeaders(timestamp: string, method: string, requestPath: string, body = "") {
+  return {
+    "OK-ACCESS-KEY": process.env.OKX_API_KEY!,
+    "OK-ACCESS-SIGN": sign(timestamp, method, requestPath, body),
+    "OK-ACCESS-TIMESTAMP": timestamp,
+    "OK-ACCESS-PASSPHRASE": process.env.OKX_API_PASSPHRASE!,
+    "OK-ACCESS-PROJECT": process.env.OKX_PROJECT_ID!,
+    "Content-Type": "application/json",
+  };
+}
+
+function assertCredentials() {
+  const missing = ["OKX_API_KEY", "OKX_SECRET_KEY", "OKX_API_PASSPHRASE", "OKX_PROJECT_ID"].filter(
+    (key) => !process.env[key]
+  );
+  if (missing.length) {
+    throw new Error(`Missing OKX API credentials in .env.local: ${missing.join(", ")}`);
+  }
+}
+
+/**
+ * Fetches a swap quote from OKX's DEX aggregator (real liquidity, real prices).
+ * Response schema follows OKX's documented quote format — if fields look
+ * different than expected, log the raw response and adjust the field
+ * names below rather than guessing further.
+ */
+export async function getSwapQuote(fromAddress: string, toAddress: string, amountRaw: string) {
+  assertCredentials();
+
+  const path = "/api/v6/dex/aggregator/quote";
+  const params = new URLSearchParams({
+    chainIndex: CHAIN_INDEX,
+    fromTokenAddress: fromAddress,
+    toTokenAddress: toAddress,
+    amount: amountRaw,
+    slippagePercent: "0.5",
+  });
+  const requestPath = `${path}?${params.toString()}`;
+  const timestamp = new Date().toISOString();
+
+  const res = await fetch(`${BASE_URL}${requestPath}`, {
+    headers: buildHeaders(timestamp, "GET", requestPath),
+  });
+
+  if (!res.ok) {
+    throw new Error(`OKX quote request failed: ${res.status} ${await res.text()}`);
+  }
+
+  const json = await res.json();
+  if (json.code !== "0") {
+    throw new Error(`OKX quote error (${json.code}): ${json.msg}`);
+  }
+
+  return json.data[0];
+}
+
+/**
+ * Fetches real swap transaction calldata (to, data, value, gas) ready to
+ * be signed by the user's wallet. Not wired to the UI yet — that's the
+ * next step once quotes are verified to look right.
+ */
+export async function getSwapTransaction(
+  fromAddress: string,
+  toAddress: string,
+  amountRaw: string,
+  userWalletAddress: string
+) {
+  assertCredentials();
+
+  const path = "/api/v6/dex/aggregator/swap";
+  const params = new URLSearchParams({
+    chainIndex: CHAIN_INDEX,
+    fromTokenAddress: fromAddress,
+    toTokenAddress: toAddress,
+    amount: amountRaw,
+    userWalletAddress,
+    slippagePercent: "0.5",
+  });
+  const requestPath = `${path}?${params.toString()}`;
+  const timestamp = new Date().toISOString();
+
+  const res = await fetch(`${BASE_URL}${requestPath}`, {
+    headers: buildHeaders(timestamp, "GET", requestPath),
+  });
+
+  if (!res.ok) {
+    throw new Error(`OKX swap request failed: ${res.status} ${await res.text()}`);
+  }
+
+  const json = await res.json();
+  if (json.code !== "0") {
+    throw new Error(`OKX swap error (${json.code}): ${json.msg}`);
+  }
+
+  return json.data[0]; // includes a `tx` object: { to, data, value, gasLimit, gasPrice }
+}
