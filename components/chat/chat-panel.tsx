@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAccount, useSendTransaction, usePublicClient } from "wagmi";
+import { useAccount, useSendTransaction } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import type { ChatMessage } from "@/lib/types";
 import type { OrbState } from "@/components/orb";
 import { generateAgentResponse } from "@/lib/agent-client";
 import { ERC20_ABI } from "@/lib/erc20-abi";
 import { xLayer } from "@/lib/chains";
+import { xLayerPublicClient } from "@/lib/xlayer-client";
 import { MessageBubble } from "./message-bubble";
 import { ChatInput } from "./chat-input";
 
@@ -36,7 +37,6 @@ export function ChatPanel({
 
   const { address, isConnected } = useAccount();
   const { sendTransactionAsync } = useSendTransaction();
-  const publicClient = usePublicClient({ chainId: xLayer.id });
   const { openConnectModal } = useConnectModal();
 
   useEffect(() => {
@@ -92,10 +92,6 @@ export function ChatPanel({
       updateCard(id, { status: "error", errorMessage: "Connect your wallet first." });
       return;
     }
-    if (!publicClient) {
-      updateCard(id, { status: "error", errorMessage: "Wallet isn't on X Layer mainnet." });
-      return;
-    }
 
     try {
       onOrbStateChange("thinking");
@@ -114,7 +110,7 @@ export function ChatPanel({
 
       // Step 1: approve, only if this is an ERC-20 and allowance is insufficient
       if (prep.approveTx) {
-        const currentAllowance = await publicClient.readContract({
+        const currentAllowance = await xLayerPublicClient.readContract({
           address: prep.tokenAddress as `0x${string}`,
           abi: ERC20_ABI,
           functionName: "allowance",
@@ -130,7 +126,7 @@ export function ChatPanel({
             gas: BigInt(prep.approveTx.gasLimit),
             chainId: xLayer.id,
           });
-          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          await xLayerPublicClient.waitForTransactionReceipt({ hash: approveHash });
         }
       }
 
@@ -145,7 +141,7 @@ export function ChatPanel({
         chainId: xLayer.id,
       });
 
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: swapHash });
+      const receipt = await xLayerPublicClient.waitForTransactionReceipt({ hash: swapHash });
 
       if (receipt.status === "success") {
         updateCard(id, { status: "success", txHash: swapHash });
