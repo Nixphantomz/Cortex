@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAccount, useSendTransaction, usePublicClient } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import type { ChatMessage } from "@/lib/types";
 import type { OrbState } from "@/components/orb";
 import { generateAgentResponse } from "@/lib/agent-client";
@@ -36,6 +37,7 @@ export function ChatPanel({
   const { address, isConnected } = useAccount();
   const { sendTransactionAsync } = useSendTransaction();
   const publicClient = usePublicClient({ chainId: xLayer.id });
+  const { openConnectModal } = useConnectModal();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -174,7 +176,17 @@ export function ChatPanel({
           ))}
         </div>
       )}
-      <ChatInput onSend={handleSend} disabled={busy} />
+
+      {isConnected ? (
+        <ChatInput onSend={handleSend} disabled={busy} />
+      ) : (
+        <button
+          onClick={openConnectModal}
+          className="glass rounded-2xl px-4 py-3 text-center text-sm font-medium text-charcoal/60 transition-colors hover:text-lavender-dim dark:text-milky/55 dark:hover:text-lavender-soft"
+        >
+          Connect your wallet to start chatting with Cortex
+        </button>
+      )}
     </div>
   );
 }
