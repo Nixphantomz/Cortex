@@ -48,9 +48,21 @@ export async function getSwapQuote(fromAddress: string, toAddress: string, amoun
   const requestPath = `${path}?${params.toString()}`;
   const timestamp = new Date().toISOString();
 
-  const res = await fetch(`${BASE_URL}${requestPath}`, {
-    headers: buildHeaders(timestamp, "GET", requestPath),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${requestPath}`, {
+      headers: buildHeaders(timestamp, "GET", requestPath),
+    });
+  } catch (err) {
+    // "fetch failed" alone hides the real reason — Node attaches it to .cause
+    const cause = err instanceof Error && "cause" in err ? err.cause : undefined;
+    console.error("OKX fetch network failure. Cause:", cause ?? err);
+    throw new Error(
+      `Could not reach OKX's API (network-level failure). Cause: ${
+        cause instanceof Error ? cause.message : String(cause ?? err)
+      }`
+    );
+  }
 
   if (!res.ok) {
     throw new Error(`OKX quote request failed: ${res.status} ${await res.text()}`);

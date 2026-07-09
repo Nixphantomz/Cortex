@@ -2,6 +2,7 @@ import type { ActionCardData } from "@/lib/types";
 import { resolveToken } from "@/lib/tokens";
 import { getSwapQuote } from "@/lib/okx-dex";
 import { toRawAmount, fromRawAmount } from "@/lib/amount";
+import { estimateNetworkFeeOKB } from "@/lib/gas";
 
 export type ToolName = "get_swap_quote" | "get_lending_rate" | "get_borrow_rate";
 
@@ -89,14 +90,15 @@ export async function executeTool(name: ToolName, args: any): Promise<ToolResult
 
       const quote = await getSwapQuote(from.address, to.address, rawAmount);
       const outputAmount = fromRawAmount(quote.toTokenAmount, to.decimals);
-      const router = quote.dexRouterList?.[0]?.router ?? "OKX DEX Aggregator";
+      const router = quote.dexRouterList?.[0]?.dexProtocol?.dexName ?? "OKX DEX Aggregator";
+      const networkFeeOKB = quote.estimateGasFee
+        ? await estimateNetworkFeeOKB(quote.estimateGasFee)
+        : 0;
 
       const data = {
         protocol: router,
         estimatedOutput: `${formatAmount(outputAmount)} ${toToken.toUpperCase()}`,
-        networkFee: quote.estimateGasFee
-          ? `${formatAmount(fromRawAmount(quote.estimateGasFee, 18))} OKB`
-          : "~$0.01",
+        networkFee: `${formatAmount(networkFeeOKB)} OKB`,
         risk: "Low" as const,
       };
 
