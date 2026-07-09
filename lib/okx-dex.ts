@@ -101,9 +101,20 @@ export async function getSwapTransaction(
   const requestPath = `${path}?${params.toString()}`;
   const timestamp = new Date().toISOString();
 
-  const res = await fetch(`${BASE_URL}${requestPath}`, {
-    headers: buildHeaders(timestamp, "GET", requestPath),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${requestPath}`, {
+      headers: buildHeaders(timestamp, "GET", requestPath),
+    });
+  } catch (err) {
+    const cause = err instanceof Error && "cause" in err ? err.cause : undefined;
+    console.error("OKX fetch network failure. Cause:", cause ?? err);
+    throw new Error(
+      `Could not reach OKX's API (network-level failure). Cause: ${
+        cause instanceof Error ? cause.message : String(cause ?? err)
+      }`
+    );
+  }
 
   if (!res.ok) {
     throw new Error(`OKX swap request failed: ${res.status} ${await res.text()}`);
@@ -115,4 +126,50 @@ export async function getSwapTransaction(
   }
 
   return json.data[0]; // includes a `tx` object: { to, data, value, gasLimit, gasPrice }
+}
+
+/**
+ * Fetches ERC-20 approval calldata for a given token + amount. Only needed
+ * for ERC-20 fromTokens — native OKB never needs approval. Per OKX's own
+ * guidance, the spender address (dexContractAddress) is NOT hardcoded here
+ * since it can change on contract upgrades — always use what this endpoint
+ * returns fresh, each time.
+ */
+export async function getApproveTransaction(tokenContractAddress: string, approveAmountRaw: string) {
+  assertCredentials();
+
+  const path = "/api/v6/dex/aggregator/approve-transaction";
+  const params = new URLSearchParams({
+    chainIndex: CHAIN_INDEX,
+    tokenContractAddress,
+    approveAmount: approveAmountRaw,
+  });
+  const requestPath = `${path}?${params.toString()}`;
+  const timestamp = new Date().toISOString();
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${requestPath}`, {
+      headers: buildHeaders(timestamp, "GET", requestPath),
+    });
+  } catch (err) {
+    const cause = err instanceof Error && "cause" in err ? err.cause : undefined;
+    console.error("OKX fetch network failure. Cause:", cause ?? err);
+    throw new Error(
+      `Could not reach OKX's API (network-level failure). Cause: ${
+        cause instanceof Error ? cause.message : String(cause ?? err)
+      }`
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(`OKX approve-transaction request failed: ${res.status} ${await res.text()}`);
+  }
+
+  const json = await res.json();
+  if (json.code !== "0") {
+    throw new Error(`OKX approve-transaction error (${json.code}): ${json.msg}`);
+  }
+
+  return json.data[0]; // { data, dexContractAddress, gasLimit, gasPrice }
 }

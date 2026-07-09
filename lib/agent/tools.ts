@@ -112,6 +112,9 @@ export async function executeTool(name: ToolName, args: any): Promise<ToolResult
           networkFee: data.networkFee,
           risk: "Low",
           status: "pending",
+          fromToken: fromToken.toUpperCase(),
+          toToken: toToken.toUpperCase(),
+          amount,
         },
       };
     }

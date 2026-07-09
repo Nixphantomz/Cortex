@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Check, Loader2 } from "lucide-react";
+import { Check, ExternalLink, Loader2 } from "lucide-react";
 import type { ActionCardData, RiskLevel } from "@/lib/types";
 
 const RISK_STYLES: Record<RiskLevel, string> = {
@@ -7,6 +7,8 @@ const RISK_STYLES: Record<RiskLevel, string> = {
   Medium: "text-amber bg-amber/10",
   High: "text-amber bg-amber/20",
 };
+
+const EXPLORER_TX_URL = "https://www.oklink.com/xlayer/tx/";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -26,7 +28,8 @@ export function ActionCard({
   onSimulate: () => void;
   onExecute: () => void;
 }) {
-  const { protocol, summary, estimatedOutput, networkFee, risk, status } = data;
+  const { protocol, summary, estimatedOutput, networkFee, risk, status, txHash, errorMessage } = data;
+  const busy = status === "approving" || status === "executing";
 
   return (
     <div className="glass w-full max-w-sm rounded-2xl p-4 animate-fade-up">
@@ -46,7 +49,7 @@ export function ActionCard({
       <div className="mt-4 flex gap-2">
         <button
           onClick={onSimulate}
-          disabled={status === "executing" || status === "success"}
+          disabled={busy || status === "success"}
           className={clsx(
             "flex-1 rounded-full border px-4 py-2 text-xs font-medium transition-colors",
             "border-charcoal/10 hover:border-lavender/40 dark:border-milky/10",
@@ -58,18 +61,40 @@ export function ActionCard({
 
         <button
           onClick={onExecute}
-          disabled={status === "executing" || status === "success"}
+          disabled={busy || status === "success"}
           className={clsx(
             "flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium transition-colors",
             "bg-lavender/90 text-white hover:bg-lavender",
             "disabled:cursor-not-allowed disabled:opacity-60"
           )}
         >
-          {status === "executing" && <Loader2 size={12} className="animate-spin" />}
+          {busy && <Loader2 size={12} className="animate-spin" />}
           {status === "success" && <Check size={12} />}
-          {status === "success" ? "Executed" : status === "executing" ? "Executing…" : "Execute"}
+          {status === "success"
+            ? "Executed"
+            : status === "approving"
+              ? "Approving…"
+              : status === "executing"
+                ? "Confirm in wallet…"
+                : "Execute"}
         </button>
       </div>
+
+      {status === "success" && txHash && (
+        <a
+          href={`${EXPLORER_TX_URL}${txHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex items-center justify-center gap-1.5 text-xs text-mint-dim hover:underline"
+        >
+          View on X Layer explorer
+          <ExternalLink size={11} />
+        </a>
+      )}
+
+      {status === "error" && errorMessage && (
+        <p className="mt-3 text-xs text-amber">{errorMessage}</p>
+      )}
     </div>
   );
 }
