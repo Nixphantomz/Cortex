@@ -4,7 +4,7 @@ export type RiskLevel = "Low" | "Medium" | "High";
 
 export type ActionKind = "swap" | "lend" | "borrow" | "unknown";
 
-export type ActionStatus = "pending" | "simulated" | "approving" | "executing" | "success" | "error";
+export type ActionStatus = "pending" | "simulated" | "switching" | "approving" | "executing" | "success" | "error";
 
 export interface ActionCardData {
   kind: ActionKind;

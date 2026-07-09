@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAccount, useSendTransaction } from "wagmi";
+import { useAccount, useSendTransaction, useSwitchChain } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import type { ChatMessage } from "@/lib/types";
 import type { OrbState } from "@/components/orb";
@@ -35,8 +35,9 @@ export function ChatPanel({
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { sendTransactionAsync } = useSendTransaction();
+  const { switchChainAsync } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
 
   useEffect(() => {
@@ -91,6 +92,20 @@ export function ChatPanel({
     if (!isConnected || !address) {
       updateCard(id, { status: "error", errorMessage: "Connect your wallet first." });
       return;
+    }
+
+    if (chainId !== xLayer.id) {
+      try {
+        updateCard(id, { status: "switching" });
+        onOrbStateChange("thinking");
+        await switchChainAsync({ chainId: xLayer.id });
+      } catch (err) {
+        updateCard(id, { status: "error", errorMessage: "Switch your wallet to X Layer mainnet to continue." });
+        onOrbStateChange("error");
+        await wait(1400);
+        onOrbStateChange("idle");
+        return;
+      }
     }
 
     try {

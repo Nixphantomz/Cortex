@@ -29,7 +29,7 @@ export function ActionCard({
   onExecute: () => void;
 }) {
   const { protocol, summary, estimatedOutput, networkFee, risk, status, txHash, errorMessage } = data;
-  const busy = status === "approving" || status === "executing";
+  const busy = status === "switching" || status === "approving" || status === "executing";
 
   return (
     <div className="glass w-full max-w-sm rounded-2xl p-4 animate-fade-up">
@@ -72,11 +72,13 @@ export function ActionCard({
           {status === "success" && <Check size={12} />}
           {status === "success"
             ? "Executed"
-            : status === "approving"
-              ? "Approving…"
-              : status === "executing"
-                ? "Confirm in wallet…"
-                : "Execute"}
+            : status === "switching"
+              ? "Switch network…"
+              : status === "approving"
+                ? "Approving…"
+                : status === "executing"
+                  ? "Confirm in wallet…"
+                  : "Execute"}
         </button>
       </div>
 
