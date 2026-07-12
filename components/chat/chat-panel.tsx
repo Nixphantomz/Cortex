@@ -15,12 +15,16 @@ import { ChatInput } from "./chat-input";
 let idCounter = 0;
 const nextId = () => `msg-${++idCounter}-${Date.now()}`;
 
-interface PrepareSwapResponse {
+interface PrepareApprovalResponse {
   isNative: boolean;
   approveTx: { to: string; data: string; spender: string; gasLimit: string; gasPrice: string } | null;
-  swapTx: { to: string; data: string; value: string; gasLimit: string; gasPrice: string };
   tokenAddress: string;
   requiredAmountRaw: string;
+  error?: string;
+}
+
+interface SwapTxResponse {
+  swapTx: { to: string; data: string; value: string; gasLimit: string; gasPrice: string };
   error?: string;
 }
 
@@ -110,7 +114,43 @@ export function ChatPanel({
 
     try {
       onOrbStateChange("thinking");
-      const res = await fetch("/api/dex/prepare-swap", {
+      const approvalRes = await fetch("/api/dex/prepare-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromToken: card.fromToken, amount: card.amount }),
+      });
+      const approval: PrepareApprovalResponse = await approvalRes.json();
+      if (!approvalRes.ok || approval.error) throw new Error(approval.error ?? "Failed to prepare approval.");
+
+      // Step 1: approve, only if this is an ERC-20 and allowance is insufficient
+      if (approval.approveTx) {
+        const currentAllowance = await xLayerPublicClient.readContract({
+          address: approval.tokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "allowance",
+          args: [address, approval.approveTx.spender as `0x${string}`],
+        });
+
+        if (currentAllowance < BigInt(approval.requiredAmountRaw)) {
+          updateCard(id, { status: "approving" });
+          onOrbStateChange("thinking");
+          const approveHash = await sendTransactionAsync({
+            to: approval.approveTx.to as `0x${string}`,
+            data: approval.approveTx.data as `0x${string}`,
+            gas: BigInt(approval.approveTx.gasLimit),
+            chainId: xLayer.id,
+          });
+          await xLayerPublicClient.waitForTransactionReceipt({ hash: approveHash });
+        }
+      }
+
+      // Step 2: fetch the swap transaction FRESH, right before sending — never
+      // reusing calldata fetched before the approval wait above, since real
+      // time passing (wallet confirmation + block time) can make an
+      // already-fetched quote stale enough to fail simulation/revert.
+      updateCard(id, { status: "executing" });
+      onOrbStateChange("executing");
+      const swapRes = await fetch("/api/dex/swap-tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -120,39 +160,14 @@ export function ChatPanel({
           userWalletAddress: address,
         }),
       });
-      const prep: PrepareSwapResponse = await res.json();
-      if (!res.ok || prep.error) throw new Error(prep.error ?? "Failed to prepare the swap.");
+      const swapPrep: SwapTxResponse = await swapRes.json();
+      if (!swapRes.ok || swapPrep.error) throw new Error(swapPrep.error ?? "Failed to fetch swap transaction.");
 
-      // Step 1: approve, only if this is an ERC-20 and allowance is insufficient
-      if (prep.approveTx) {
-        const currentAllowance = await xLayerPublicClient.readContract({
-          address: prep.tokenAddress as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: "allowance",
-          args: [address, prep.approveTx.spender as `0x${string}`],
-        });
-
-        if (currentAllowance < BigInt(prep.requiredAmountRaw)) {
-          updateCard(id, { status: "approving" });
-          onOrbStateChange("thinking");
-          const approveHash = await sendTransactionAsync({
-            to: prep.approveTx.to as `0x${string}`,
-            data: prep.approveTx.data as `0x${string}`,
-            gas: BigInt(prep.approveTx.gasLimit),
-            chainId: xLayer.id,
-          });
-          await xLayerPublicClient.waitForTransactionReceipt({ hash: approveHash });
-        }
-      }
-
-      // Step 2: the actual swap
-      updateCard(id, { status: "executing" });
-      onOrbStateChange("executing");
       const swapHash = await sendTransactionAsync({
-        to: prep.swapTx.to as `0x${string}`,
-        data: prep.swapTx.data as `0x${string}`,
-        value: BigInt(prep.swapTx.value || "0"),
-        gas: BigInt(prep.swapTx.gasLimit),
+        to: swapPrep.swapTx.to as `0x${string}`,
+        data: swapPrep.swapTx.data as `0x${string}`,
+        value: BigInt(swapPrep.swapTx.value || "0"),
+        gas: BigInt(swapPrep.swapTx.gasLimit),
         chainId: xLayer.id,
       });
 
