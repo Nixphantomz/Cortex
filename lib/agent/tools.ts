@@ -3,6 +3,14 @@ import { resolveToken } from "@/lib/tokens";
 import { getSwapQuote } from "@/lib/okx-dex";
 import { toRawAmount, fromRawAmount } from "@/lib/amount";
 import { estimateNetworkFeeOKB } from "@/lib/gas";
+import { xLayerPublicClient } from "@/lib/xlayer-client";
+import {
+  AAVE_DATA_PROVIDER_ADDRESS,
+  AAVE_DATA_PROVIDER_ABI,
+  isAaveReserve,
+  isAaveBorrowable,
+  rayToApyString,
+} from "@/lib/aave";
 
 export type ToolName = "get_swap_quote" | "get_lending_rate" | "get_borrow_rate";
 
@@ -120,13 +128,44 @@ export async function executeTool(name: ToolName, args: any): Promise<ToolResult
     }
     case "get_lending_rate": {
       const { token, amount } = args;
+      const upperToken = token.toUpperCase();
+
+      if (isAaveReserve(upperToken)) {
+        const asset = resolveToken(upperToken);
+        const reserveData = await xLayerPublicClient.readContract({
+          address: AAVE_DATA_PROVIDER_ADDRESS,
+          abi: AAVE_DATA_PROVIDER_ABI,
+          functionName: "getReserveData",
+          args: [asset.address as `0x${string}`],
+        });
+        const liquidityRate = reserveData[5]; // liquidityRate field
+        const apy = rayToApyString(liquidityRate);
+
+        const data = { protocol: "Aave V3", apy, networkFee: "~0.00001 OKB", risk: "Low" };
+        return {
+          data,
+          card: {
+            kind: "lend",
+            protocol: data.protocol,
+            summary: `Supply ${amount} ${upperToken}`,
+            estimatedOutput: `${data.apy} APY`,
+            networkFee: data.networkFee,
+            risk: "Low",
+            status: "pending",
+            fromToken: upperToken,
+            amount,
+          },
+        };
+      }
+
+      // Not a listed Aave reserve on X Layer — stay honestly simulated.
       const data = { protocol: "Aave V3 (simulated)", apy: "5.2%", networkFee: "$0.05", risk: "Low" };
       return {
         data,
         card: {
           kind: "lend",
           protocol: data.protocol,
-          summary: `Supply ${amount} ${token}`,
+          summary: `Supply ${amount} ${upperToken}`,
           estimatedOutput: `${data.apy} APY`,
           networkFee: data.networkFee,
           risk: "Low",
@@ -136,13 +175,44 @@ export async function executeTool(name: ToolName, args: any): Promise<ToolResult
     }
     case "get_borrow_rate": {
       const { token, amount } = args;
+      const upperToken = token.toUpperCase();
+
+      if (isAaveReserve(upperToken) && isAaveBorrowable(upperToken)) {
+        const asset = resolveToken(upperToken);
+        const reserveData = await xLayerPublicClient.readContract({
+          address: AAVE_DATA_PROVIDER_ADDRESS,
+          abi: AAVE_DATA_PROVIDER_ABI,
+          functionName: "getReserveData",
+          args: [asset.address as `0x${string}`],
+        });
+        const variableBorrowRate = reserveData[6]; // variableBorrowRate field
+        const apr = rayToApyString(variableBorrowRate);
+
+        const data = { protocol: "Aave V3", apr: `${apr} variable`, networkFee: "~0.00001 OKB", risk: "Medium" };
+        return {
+          data,
+          card: {
+            kind: "borrow",
+            protocol: data.protocol,
+            summary: `Borrow ${amount} ${upperToken}`,
+            estimatedOutput: data.apr,
+            networkFee: data.networkFee,
+            risk: "Medium",
+            status: "pending",
+            fromToken: upperToken,
+            amount,
+          },
+        };
+      }
+
+      // Not a listed/borrowable Aave reserve on X Layer — stay honestly simulated.
       const data = { protocol: "Aave V3 (simulated)", apr: "3.8%", networkFee: "$0.05", risk: "Medium" };
       return {
         data,
         card: {
           kind: "borrow",
           protocol: data.protocol,
-          summary: `Borrow ${amount} ${token}`,
+          summary: `Borrow ${amount} ${upperToken}`,
           estimatedOutput: `${data.apr} variable APR`,
           networkFee: data.networkFee,
           risk: "Medium",

@@ -14,8 +14,9 @@ export interface ActionCardData {
   networkFee: string;
   risk: RiskLevel;
   status: ActionStatus;
-  // Structured fields for "swap" cards only — needed to actually execute,
-  // since `summary` is just display text.
+  // Structured fields needed to actually execute — `summary` is just
+  // display text. For swap: fromToken/toToken/amount all set. For real
+  // (non-simulated) lend/borrow: fromToken (the asset) + amount set.
   fromToken?: string;
   toToken?: string;
   amount?: number;
