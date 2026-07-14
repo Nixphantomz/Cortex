@@ -2,6 +2,15 @@
 // No authentication required for these endpoints, unlike the DEX aggregator.
 const STABLECOINS = new Set(["USDC", "USDT", "DAI", "USDG"]);
 
+// Maps our internal token symbols to the ticker OKX's market API expects
+// (e.g. our "WBTC"/"xBTC" both mean the market's "BTC" ticker).
+const TICKER_MAP: Record<string, string> = { OKB: "OKB", WOKB: "OKB", ETH: "ETH", WETH: "ETH", WBTC: "BTC" };
+
+export function resolveTicker(symbol: string): string {
+  const upper = symbol.toUpperCase();
+  return TICKER_MAP[upper] ?? upper;
+}
+
 export async function getSpotPriceUSD(tickerSymbol: string): Promise<number> {
   const upper = tickerSymbol.toUpperCase();
   if (STABLECOINS.has(upper)) return 1; // pegged, not worth a network call

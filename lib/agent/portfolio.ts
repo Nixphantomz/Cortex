@@ -1,7 +1,7 @@
 import { createPublicClient, http, formatUnits } from "viem";
 import { xLayer } from "@/lib/chains";
 import { XLAYER_TOKENS } from "@/lib/tokens";
-import { getSpotPriceUSD } from "@/lib/okx-market";
+import { getSpotPriceUSD, resolveTicker } from "@/lib/okx-market";
 
 const client = createPublicClient({ chain: xLayer, transport: http() });
 
@@ -15,8 +15,6 @@ const erc20Abi = [
   },
 ] as const;
 
-// Maps our internal token symbols to the ticker OKX's market API expects.
-const PRICE_TICKER: Record<string, string> = { OKB: "OKB", ETH: "ETH", WBTC: "BTC" };
 const STABLES = ["USDC", "USDT", "DAI"];
 
 // Matches the simulated lending APY in lib/agent/tools.ts. Real lending
@@ -63,10 +61,10 @@ export async function getPortfolio(walletAddress: string): Promise<PortfolioResu
               args: [address],
             })) as bigint);
 
-      if (rawBalance === BigInt(0)) continue;
+      if (rawBalance === 0n) continue;
 
       const balance = Number(formatUnits(rawBalance, token.decimals));
-      const price = await getSpotPriceUSD(PRICE_TICKER[symbol] ?? symbol);
+      const price = await getSpotPriceUSD(resolveTicker(symbol));
       holdings.push({ symbol, balance, usdValue: balance * price });
     } catch (err) {
       console.error(`Failed to read ${symbol} balance:`, err);

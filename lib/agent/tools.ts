@@ -4,6 +4,7 @@ import { getSwapQuote } from "@/lib/okx-dex";
 import { toRawAmount, fromRawAmount } from "@/lib/amount";
 import { estimateNetworkFeeOKB } from "@/lib/gas";
 import { xLayerPublicClient } from "@/lib/xlayer-client";
+import { getSpotPriceUSD, resolveTicker } from "@/lib/okx-market";
 import {
   AAVE_DATA_PROVIDER_ADDRESS,
   AAVE_DATA_PROVIDER_ABI,
@@ -12,7 +13,7 @@ import {
   rayToApyString,
 } from "@/lib/aave";
 
-export type ToolName = "get_swap_quote" | "get_lending_rate" | "get_borrow_rate";
+export type ToolName = "get_token_price" | "get_swap_quote" | "get_lending_rate" | "get_borrow_rate";
 
 // Scales decimal places to the size of the number so tiny ETH/BTC amounts
 // don't get rounded to 0.00 and large stablecoin amounts don't show noise.
@@ -24,6 +25,21 @@ function formatAmount(n: number): string {
 }
 
 export const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "get_token_price",
+      description:
+        "Get the current USD price of a single token. Use this ONLY for informational questions about one token's value (e.g. 'how much is OKB worth', 'what's the price of ETH') — never for swap requests, which need get_swap_quote instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          token: { type: "string", description: "Token symbol, e.g. OKB" },
+        },
+        required: ["token"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -77,11 +93,19 @@ export const TOOLS = [
 
 interface ToolResult {
   data: Record<string, unknown>;
-  card: ActionCardData;
+  card?: ActionCardData;
 }
 
 export async function executeTool(name: ToolName, args: any): Promise<ToolResult> {
   switch (name) {
+    case "get_token_price": {
+      const { token } = args;
+      const priceUSD = await getSpotPriceUSD(resolveTicker(token));
+      return {
+        data: { token: token.toUpperCase(), priceUSD },
+        // No card — this is purely informational, not an actionable proposal.
+      };
+    }
     case "get_swap_quote": {
       const { fromToken, toToken, amount } = args;
 
