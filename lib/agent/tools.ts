@@ -158,8 +158,15 @@ export async function executeTool(name: ToolName, args: any): Promise<ToolResult
         };
       }
 
-      // Not a listed Aave reserve on X Layer — stay honestly simulated.
-      const data = { protocol: "Aave V3 (simulated)", apy: "5.2%", networkFee: "$0.05", risk: "Low" };
+      // Not a listed Aave reserve on X Layer — explain why, don't silently fake it.
+      const data = {
+        protocol: "Aave V3 (simulated)",
+        apy: "5.2%",
+        networkFee: "$0.05",
+        risk: "Low",
+        simulated: true,
+        reason: `${upperToken} isn't a supported Aave reserve on X Layer yet — real lending currently works for USDT, WBTC, WOKB, and ETH.`,
+      };
       return {
         data,
         card: {
@@ -205,8 +212,18 @@ export async function executeTool(name: ToolName, args: any): Promise<ToolResult
         };
       }
 
-      // Not a listed/borrowable Aave reserve on X Layer — stay honestly simulated.
-      const data = { protocol: "Aave V3 (simulated)", apr: "3.8%", networkFee: "$0.05", risk: "Medium" };
+      // Not a listed/borrowable Aave reserve on X Layer — explain why.
+      const reason = isAaveReserve(upperToken)
+        ? `${upperToken} is supported on Aave X Layer but isn't enabled for borrowing — it can only be supplied as collateral.`
+        : `${upperToken} isn't a supported Aave reserve on X Layer yet — real borrowing currently works for USDT, WBTC, and ETH.`;
+      const data = {
+        protocol: "Aave V3 (simulated)",
+        apr: "3.8%",
+        networkFee: "$0.05",
+        risk: "Medium",
+        simulated: true,
+        reason,
+      };
       return {
         data,
         card: {
